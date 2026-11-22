@@ -6,13 +6,10 @@ from database import (
     authenticate,
     create_order,
     create_user,
-    get_orders,
-    get_user,
     initialize_database,
     load_cart,
     recover_password,
     set_cart,
-    update_profile,
 )
 from telegram_notify import notify_login, notify_new_order, notify_new_user
 
@@ -49,6 +46,7 @@ def rupees(amount: float) -> str:
     return f"₹{text}"
 
 
+# ── Session state defaults ──────────────────────────────────────
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
@@ -75,7 +73,6 @@ def checkout() -> None:
     if not st.session_state.cart:
         st.warning("Your cart is empty.")
         return
-    # Snapshot items before the cart is cleared
     order_items = [
         {
             "product_name": next(p["name"] for p in PRODUCTS if p["id"] == pid),
@@ -98,8 +95,12 @@ def logout() -> None:
     st.session_state.cart = {}
 
 
+# ── Grain overlay ───────────────────────────────────────────────
 st.markdown('<div class="grain"></div>', unsafe_allow_html=True)
 
+# ══════════════════════════════════════════════════════════════════
+# LOGIN / REGISTER WALL
+# ══════════════════════════════════════════════════════════════════
 if not st.session_state.logged_in:
     st.markdown('<div class="login-heading">PatelKart</div>', unsafe_allow_html=True)
     story_column, panel_column = st.columns([1.35, 1], gap="large", vertical_alignment="center")
@@ -184,94 +185,48 @@ if not st.session_state.logged_in:
     st.stop()
 
 
+# ══════════════════════════════════════════════════════════════════
+# AUTHENTICATED — SHOP PAGE
+# ══════════════════════════════════════════════════════════════════
+
 cart_count = sum(st.session_state.cart.values())
 cart_total = sum(
-    next(product["price"] for product in PRODUCTS if product["id"] == product_id) * quantity
-    for product_id, quantity in st.session_state.cart.items()
+    next(p["price"] for p in PRODUCTS if p["id"] == pid) * qty
+    for pid, qty in st.session_state.cart.items()
 )
 
-st.markdown("""
+# ── Top bar ─────────────────────────────────────────────────────
+st.markdown(f"""
     <header class="topbar">
-      <a class="brand" href="#"><span class="brand-mark">P</span><span>PatelKart</span></a>
-      <nav class="nav-links"><a class="active" href="#shop">Shop</a><a href="#story">Our story</a></nav>
+      <a class="brand" href="#">
+        <span class="brand-mark">P</span><span>PatelKart</span>
+      </a>
+      <nav class="nav-links">
+        <a class="active" href="#">Shop</a>
+      </nav>
+      <div class="topbar-right">
+        <span class="topbar-welcome">Hello, <strong>{st.session_state.username}</strong></span>
+      </div>
     </header>
 """, unsafe_allow_html=True)
 
-header_left, header_right = st.columns([7, 1])
-with header_left:
-    st.markdown(f'<div class="welcome">Hello, <strong>{st.session_state.username}</strong></div>', unsafe_allow_html=True)
-with header_right:
+# ── Action row: Profile pill + Logout ───────────────────────────
+action_left, action_mid, action_right = st.columns([5, 1, 1])
+with action_mid:
+    if st.button("👤 Profile", key="go_profile", width="stretch"):
+        st.switch_page("pages/1_Profile.py")
+with action_right:
     st.button("Logout", key="logout", on_click=logout, width="stretch")
 
-customer = get_user(st.session_state.username)
-profile_tab, orders_tab = st.tabs(["My profile", "Order history"])
+st.markdown("<div class='shop-divider'></div>", unsafe_allow_html=True)
 
-with profile_tab:
-    picture_col, details_col = st.columns([1, 3], vertical_alignment="top")
-    with picture_col:
-        if customer and customer.get("profile_picture"):
-            st.image(customer["profile_picture"], alt="Customer profile picture", width=180)
-        else:
-            st.markdown('<div class="profile-placeholder">P</div>', unsafe_allow_html=True)
-
-    with details_col:
-        birthday_value = None
-        if customer and customer.get("birthday"):
-            try:
-                from datetime import date
-                birthday_value = date.fromisoformat(customer["birthday"])
-            except ValueError:
-                birthday_value = None
-
-        with st.form("profile_form"):
-            profile_name = st.text_input("Name", value=customer.get("name", "") if customer else "")
-            profile_phone = st.text_input("Phone number", value=customer.get("phone", "") if customer else "")
-            profile_address = st.text_area("Address", value=customer.get("address", "") if customer else "")
-            profile_birthday = st.date_input("Birthday", value=birthday_value)
-            profile_picture = st.file_uploader("Profile picture", type=["png", "jpg", "jpeg", "webp"])
-            saved = st.form_submit_button("Save profile", width="stretch")
-
-        if saved:
-            update_profile(
-                st.session_state.username,
-                profile_name,
-                profile_phone,
-                profile_address,
-                profile_birthday.isoformat() if profile_birthday else "",
-                profile_picture.getvalue() if profile_picture else None,
-                profile_picture.name if profile_picture else "",
-            )
-            st.success("Profile saved.")
-            st.rerun()
-
-with orders_tab:
-    orders = get_orders(st.session_state.username)
-    if not orders:
-        st.info("No orders yet. Your checkout history will appear here.")
-    else:
-        for order in orders:
-            with st.container(border=True):
-                st.markdown(f"### Order #{order['id']} — {rupees(order['total'])}")
-                st.caption(f"{order['created_at']} · {order['status']}")
-                for item in order["items"]:
-                    st.write(f"{item['quantity']} × {item['product_name']} — {rupees(item['unit_price'] * item['quantity'])}")
-
+# ── Shop heading + filters ───────────────────────────────────────
 st.markdown("""
-    <section class="hero" id="story">
-      <div class="hero-copy">
-        <p class="eyebrow"><span></span> The everyday edit</p>
-        <h1>Small finds.<br><em>Big character.</em></h1>
-        <p class="hero-description">Five wonderfully useful things, handpicked for curious homes and creative lives.</p>
-      </div>
-      <div class="hero-art">
-        <div class="sun"></div>
-        <div class="guitar"><div class="guitar-neck"></div><div class="guitar-head"></div><div class="guitar-body"><i></i></div></div>
-        <p>Made to stand out</p>
-      </div>
-    </section>
+    <div class="shop-header">
+      <p class="section-kicker">Curated collection</p>
+      <h2 class="shop-title">The oddball five</h2>
+    </div>
 """, unsafe_allow_html=True)
-
-st.markdown('<section class="shop-section" id="shop"><div class="section-heading"><div><p class="section-kicker">Curated collection</p><h2>The oddball five</h2></div></div></section>', unsafe_allow_html=True)
 
 controls_left, controls_right = st.columns([3, 1])
 with controls_left:
@@ -279,10 +234,11 @@ with controls_left:
 with controls_right:
     category = st.selectbox("Filter", ["All", "Books", "Play", "Home"], label_visibility="collapsed")
 
+# ── Product grid ─────────────────────────────────────────────────
 visible_products = [
-    product for product in PRODUCTS
-    if (category == "All" or product["category"] == category)
-    and (not search or search.lower() in product["name"].lower())
+    p for p in PRODUCTS
+    if (category == "All" or p["category"] == category)
+    and (not search or search.lower() in p["name"].lower())
 ]
 
 for start in range(0, len(visible_products), 3):
@@ -307,13 +263,14 @@ for start in range(0, len(visible_products), 3):
 if not visible_products:
     st.markdown('<div class="no-results">No curious finds match that search.</div>', unsafe_allow_html=True)
 
+# ── Cart expander ─────────────────────────────────────────────────
 cart_count = sum(st.session_state.cart.values())
 cart_total = sum(
-    next(product["price"] for product in PRODUCTS if product["id"] == product_id) * quantity
-    for product_id, quantity in st.session_state.cart.items()
+    next(p["price"] for p in PRODUCTS if p["id"] == pid) * qty
+    for pid, qty in st.session_state.cart.items()
 )
 
-with st.expander(f"Shopping cart — {cart_count} item{'s' if cart_count != 1 else ''} | {rupees(cart_total)}", expanded=False):
+with st.expander(f"🛒 Shopping cart — {cart_count} item{'s' if cart_count != 1 else ''} · {rupees(cart_total)}", expanded=False):
     if not st.session_state.cart:
         st.info("Your cart is empty. Add a few curious finds.")
     else:
@@ -321,7 +278,7 @@ with st.expander(f"Shopping cart — {cart_count} item{'s' if cart_count != 1 el
             product = next(item for item in PRODUCTS if item["id"] == product_id)
             item_col, minus_col, count_col, plus_col = st.columns([5, 1, 1, 1])
             with item_col:
-                st.markdown(f"**{product['emoji']} {product['name']}**  \\n{rupees(product['price'])}")
+                st.markdown(f"**{product['emoji']} {product['name']}**  \n{rupees(product['price'])}")
             with minus_col:
                 st.button("−", key=f"minus_{product_id}", on_click=remove_from_cart, args=(product_id,))
             with count_col:
@@ -332,6 +289,7 @@ with st.expander(f"Shopping cart — {cart_count} item{'s' if cart_count != 1 el
         st.markdown(f'<div class="subtotal"><span>Subtotal</span><strong>{rupees(cart_total)}</strong></div>', unsafe_allow_html=True)
         st.button("Checkout", key="checkout", on_click=checkout, width="stretch", type="primary")
 
+# ── Footer ────────────────────────────────────────────────────────
 st.markdown("""
     <footer>
       <a class="brand footer-brand" href="#"><span class="brand-mark">P</span><span>PatelKart</span></a>

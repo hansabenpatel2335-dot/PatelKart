@@ -51,7 +51,7 @@ def initialize_database():
 
             CREATE TABLE IF NOT EXISTS carts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL UNIQUE,
+                user_id INTEGER NOT NULL,
                 product_id INTEGER NOT NULL,
                 quantity INTEGER NOT NULL CHECK(quantity > 0),
                 UNIQUE(user_id, product_id),
