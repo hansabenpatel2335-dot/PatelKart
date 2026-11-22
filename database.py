@@ -78,6 +78,27 @@ def initialize_database():
             );
         """)
 
+        connection.execute("DROP TABLE IF EXISTS carts_rebuilt")
+        connection.execute("""
+            CREATE TABLE carts_rebuilt (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL CHECK(quantity > 0),
+                UNIQUE(user_id, product_id),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        """)
+        connection.execute("""
+            INSERT OR REPLACE INTO carts_rebuilt(user_id, product_id, quantity)
+            SELECT user_id, product_id, SUM(quantity)
+            FROM carts
+            WHERE quantity > 0
+            GROUP BY user_id, product_id
+        """)
+        connection.execute("DROP TABLE carts")
+        connection.execute("ALTER TABLE carts_rebuilt RENAME TO carts")
+
         demo = connection.execute("SELECT id FROM users WHERE username = ?", ("customer",)).fetchone()
         if demo is None:
             connection.execute("""
