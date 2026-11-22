@@ -1,0 +1,13 @@
+[theme]
+base = "light"
+primaryColor = "#102019"
+backgroundColor = "#f3efe5"
+secondaryBackgroundColor = "#e8e2d3"
+textColor = "#102019"
+borderColor = "#d8d2c3"
+baseRadius = "0.5rem"
+showWidgetBorder = true
+
+[server]
+headless = true
+enableXsrfProtection = true

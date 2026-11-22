@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Streamlit secrets — NEVER commit this
+.streamlit/secrets.toml
+
+# Local database & uploads (not needed in git; Streamlit Cloud uses ephemeral storage)
+data/
+uploads/
+
+# macOS
+.DS_Store
